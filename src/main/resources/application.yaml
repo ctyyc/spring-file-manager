@@ -35,3 +35,14 @@ storage:
     location: c:/temp/images
 
 env: local
+
+aws:
+  s3:
+    region: ap-northeast-2
+    bucket:
+      name: dummy
+    credentials:
+      access:
+        key: dummy
+      secret:
+        key: dummy

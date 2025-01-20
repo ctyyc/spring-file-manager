@@ -15,6 +15,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 
 @Tag(name = "File API")
@@ -24,6 +25,8 @@ import java.io.IOException;
 public class FileController {
     @Autowired
 	private FileStorageService fileStorageService;
+	@Autowired
+	private S3FileService s3FileService;
 
 	@Operation(summary = "첨부파일 업로드", description = "첨부파일을 업로드한다.")
 	@PostMapping(path = "/attach", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -31,8 +34,8 @@ public class FileController {
 			@RequestParam("file") MultipartFile file,
 			@RequestParam(value = "etcInfo", required = false) String etcInfo
 	) throws IOException {
+		log.info("=== attachedFileUpload params : {}, {}", file.getOriginalFilename(), etcInfo);
 		FileuploadInfo stored = fileStorageService.storeToTempDir(file, etcInfo);
-		log.info("=== stored : {}", stored);
 
 		return ResponseEntity.ok(stored);
 	}
@@ -45,19 +48,31 @@ public class FileController {
 			@PathVariable("path2") String path2,
             @RequestParam(name = "name", required = false) String name
     ) throws IOException {
-		log.info("=== file download : {}/{} ({})", path1, path2, name);
-		if (Strings.isBlank(name)) {
-			name = "nobody";
-		} else {
-			name = name.trim();
-		}
-		FiledownloadInfo fdi = fileStorageService.loadAsResource(name, path1, path2);
+		log.info("=== attachedFileDownload params : {}, {}, {}", path1, path2, name);
+		// 파일 명 설정
+		name = Strings.isBlank(name) ? "nobody" : name.trim();
+		FiledownloadInfo info = fileStorageService.loadAsResource(name, path1, path2);
 
 		try {
-			return fileStorageService.download(request, fdi);
+			return fileStorageService.download(request, info);
 		} catch (Exception e) {
 			log.error(e.getMessage());
             throw new RuntimeException("Error occurred while downloading file", e);
 		}
 	}
+
+	@Operation(summary = "AWS S3 첨부파일 업로드", description = "AWS S3 첨부파일을 업로드한다.")
+	@PostMapping(path = "/s3/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> s3FileUpload(@RequestParam("file") MultipartFile file) {
+        try {
+            File tempFile = File.createTempFile("upload-", file.getOriginalFilename());
+            file.transferTo(tempFile);
+			s3FileService.uploadFile(tempFile.getAbsolutePath(), file.getOriginalFilename());
+
+            return ResponseEntity.ok("upload success");
+        } catch (IOException e) {
+			log.error("=== uploadFile error : {}", e.getMessage());
+            return ResponseEntity.ok("upload fail");
+        }
+    }
 }
